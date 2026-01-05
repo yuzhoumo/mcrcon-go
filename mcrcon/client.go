@@ -1,7 +1,6 @@
 package mcrcon
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+    "github.com/chzyer/readline"
 )
 
 // RCONClient manages the RCON connection
@@ -121,20 +122,32 @@ func (c *RCONClient) RunTerminalMode() int {
 	fmt.Println("Logged in.")
 	fmt.Println("Type 'Q' or press Ctrl-D / Ctrl-C to disconnect.")
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Print("> ")
+	// Configure readline with history
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "> ",
+		HistoryFile:     os.ExpandEnv("$HOME/.mcrcon_history"),
+		AutoComplete:    newCommandCompleter(),
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize readline: %w\n", err)
+		return -1
+	}
+	defer rl.Close()
 
-		if !scanner.Scan() {
+	for {
+		line, err := rl.Readline()
+		if err != nil { // io.EOF or readline.ErrInterrupt
 			break
 		}
 
-		command := strings.TrimSpace(scanner.Text())
+		command := strings.TrimSpace(line)
 		if len(command) == 0 {
 			continue
 		}
 
-		if strings.EqualFold(command, "q") {
+		if strings.EqualFold(command, "q") || strings.EqualFold(command, "quit") || strings.EqualFold(command, "exit") {
 			break
 		}
 
@@ -146,11 +159,6 @@ func (c *RCONClient) RunTerminalMode() int {
 		if strings.EqualFold(command, "stop") {
 			break
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Input error: %v\n", err)
-		return 1
 	}
 
 	return 0
